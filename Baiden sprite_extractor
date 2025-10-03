@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sprite Extractor</title>
+    <style>
+        body {
+            background: #1a1a1a;
+            color: #fff;
+            font-family: monospace;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #00ffff;
+            text-align: center;
+            font-size: 24px;
+        }
+        .controls {
+            background: #2a2a2a;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border: 2px solid #444;
+        }
+        .control-group {
+            margin-bottom: 15px;
+        }
+        .control-group label {
+            display: block;
+            color: #00ffff;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .control-group select,
+        .control-group input[type="number"] {
+            background: #1a1a1a;
+            color: #fff;
+            border: 2px solid #666;
+            padding: 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            width: 100%;
+            max-width: 300px;
+        }
+        .control-group input[type="number"] {
+            width: 100px;
+        }
+        .info-box {
+            background: #333;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 5px;
+            font-size: 12px;
+            color: #aaa;
+        }
+        .sprite-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 30px;
+        }
+        .sprite-item {
+            background: #2a2a2a;
+            border: 2px solid #444;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .sprite-item h3 {
+            color: #00ffff;
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+        .canvas-wrapper {
+            background: repeating-conic-gradient(#2a2a2a 0% 25%, #333 0% 50%) 50% / 10px 10px;
+            display: inline-block;
+            border: 2px solid #666;
+            padding: 10px;
+        }
+        canvas {
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            display: block;
+        }
+        .info {
+            background: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 4px solid #00ffff;
+        }
+        .download-btn, .process-btn {
+            background: #00ffff;
+            color: #000;
+            border: none;
+            padding: 10px 20px;
+            margin-top: 10px;
+            cursor: pointer;
+            font-family: monospace;
+            font-weight: bold;
+            border-radius: 4px;
+        }
+        .download-btn:hover, .process-btn:hover {
+            background: #00cccc;
+        }
+        .process-btn {
+            font-size: 16px;
+            padding: 12px 30px;
+        }
+        #uploadArea {
+            border: 3px dashed #666;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #2a2a2a;
+        }
+        #uploadArea:hover {
+            border-color: #00ffff;
+        }
+        #uploadArea.dragover {
+            border-color: #00ffff;
+            background: #333;
+        }
+        input[type="file"] {
+            display: none;
+        }
+        #preview {
+            max-width: 100%;
+            border: 2px solid #666;
+            margin-top: 20px;
+            display: none;
+        }
+        .row {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        .col {
+            flex: 1;
+            min-width: 250px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Baiden's Sprite Extractor</h1>
+        
+        <div class="info">
+            <strong>Instructions:</strong> Upload an image, configure detection settings, and click "Extract Sprites" to generate PNG files with transparent backgrounds.
+        </div>
+
+        <div id="uploadArea">
+            <p style="font-size: 18px; margin: 0;">📁 Click or drag image here</p>
+            <input type="file" id="fileInput" accept="image/*">
+        </div>
+
+        <canvas id="preview"></canvas>
+
+        <div class="controls">
+            <h2 style="color: #ff2f00; margin-top: 0;">Detection Settings</h2>
+            
+            <div class="row">
+                <div class="col">
+                    <div class="control-group">
+                        <label>Detection Method:</label>
+                        <select id="detectionMethod">
+                            <option value="manual">Manual Regions (Predefined)</option>
+                            <option value="floodfill">Flood Fill (Auto-detect connected pixels)</option>
+                            <option value="grid">Grid Division (Split into tiles)</option>
+                            <option value="contour">Contour Detection (Find boundaries)</option>
+                        </select>
+                        <div class="info-box" id="methodInfo">Select predefined sprite regions</div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Output Size:</label>
+                        <input type="number" id="outputSize" value="50" min="16" max="512" step="1">
+                        <span style="color: #aaa; margin-left: 10px;">px (square)</span>
+                    </div>
+                </div>
+
+                <div class="col">
+                    <div class="control-group">
+                        <label>Background Mode:</label>
+                        <select id="bgMode">
+                            <option value="dark">Dark Background (remove black/dark colors)</option>
+                            <option value="light">Light Background (remove white/light colors)</option>
+                            <option value="auto">Auto-detect (sample corners)</option>
+                        </select>
+                    </div>
+
+                    <div class="control-group" id="thresholdGroup">
+                        <label>Background Threshold (0-255):</label>
+                        <input type="number" id="bgThreshold" value="15" min="0" max="255" step="1">
+                        <div class="info-box">Tolerance for background color detection</div>
+                    </div>
+
+                    <div class="control-group" id="minSizeGroup" style="display:none;">
+                        <label>Minimum Element Size:</label>
+                        <input type="number" id="minSize" value="100" min="10" max="10000" step="10">
+                        <span style="color: #aaa; margin-left: 10px;">pixels</span>
+                    </div>
+
+                    <div class="control-group" id="gridSizeGroup" style="display:none;">
+                        <label>Grid Columns × Rows:</label>
+                        <input type="number" id="gridCols" value="4" min="1" max="20" step="1" style="width: 60px;">
+                        <span style="color: #aaa; margin: 0 5px;">×</span>
+                        <input type="number" id="gridRows" value="3" min="1" max="20" step="1" style="width: 60px;">
+                    </div>
+                </div>
+            </div>
+
+            <button class="process-btn" id="processBtn" disabled>Extract Sprites</button>
+        </div>
+        
+        <div class="sprite-grid" id="spriteGrid"></div>
+    </div>
+
+    <script>
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const spriteGrid = document.getElementById('spriteGrid');
+        const processBtn = document.getElementById('processBtn');
+        const detectionMethod = document.getElementById('detectionMethod');
+        const methodInfo = document.getElementById('methodInfo');
+        const preview = document.getElementById('preview');
+        const outputSize = document.getElementById('outputSize');
+        const bgThreshold = document.getElementById('bgThreshold');
+        const minSize = document.getElementById('minSize');
+        const minSizeGroup = document.getElementById('minSizeGroup');
+        const gridSizeGroup = document.getElementById('gridSizeGroup');
+        const gridCols = document.getElementById('gridCols');
+        const gridRows = document.getElementById('gridRows');
+        const bgMode = document.getElementById('bgMode');
+
+        let currentImageData = null;
+        let currentCanvas = null;
+        let detectedBgColor = null;
+
+        const methodDescriptions = {
+            manual: 'Select predefined sprite regions',
+            floodfill: 'Automatically find connected color regions',
+            grid: 'Divide image into equal grid tiles',
+            contour: 'Detect object boundaries automatically'
+        };
+
+        detectionMethod.addEventListener('change', () => {
+            methodInfo.textContent = methodDescriptions[detectionMethod.value];
+            
+            minSizeGroup.style.display = (detectionMethod.value === 'floodfill' || detectionMethod.value === 'contour') ? 'block' : 'none';
+            gridSizeGroup.style.display = detectionMethod.value === 'grid' ? 'block' : 'none';
+        });
+
+        uploadArea.addEventListener('click', () => fileInput.click());
+        
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('dragover');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('dragover');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('dragover');
+            if (e.dataTransfer.files.length) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length) {
+                handleFile(e.target.files[0]);
+            }
+        });
+
+        processBtn.addEventListener('click', () => {
+            if (currentCanvas) {
+                processImage();
+            }
+        });
+
+        function handleFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                const img = new Image();
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    ctx.drawImage(img, 0, 0);
+                    
+                    currentCanvas = canvas;
+                    currentImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    
+                    // Detect background color
+                    detectedBgColor = detectBackgroundColor(currentImageData);
+                    
+                    preview.width = img.width;
+                    preview.height = img.height;
+                    preview.style.display = 'block';
+                    const previewCtx = preview.getContext('2d');
+                    previewCtx.drawImage(img, 0, 0);
+                    
+                    processBtn.disabled = false;
+                };
+                img.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function processImage() {
+            spriteGrid.innerHTML = '';
+            
+            // Update detected background color in case user changed mode
+            if (bgMode.value === 'auto') {
+                detectedBgColor = detectBackgroundColor(currentImageData);
+            }
+            
+            const method = detectionMethod.value;
+            
+            switch(method) {
+                case 'manual':
+                    extractManualRegions();
+                    break;
+                case 'floodfill':
+                    extractFloodFill();
+                    break;
+                case 'grid':
+                    extractGrid();
+                    break;
+                case 'contour':
+                    extractContours();
+                    break;
+            }
+        }
+
+        function extractManualRegions() {
+            const ctx = currentCanvas.getContext('2d', { willReadFrequently: true });
+            const sprites = [
+                { x: 65, y: 140, w: 145, h: 90, name: "Red Dragon Logo" },
+                { x: 65, y: 265, w: 165, h: 135, name: "After The War Text" },
+                { x: 450, y: 90, w: 130, h: 320, name: "Muscular Character" },
+                { x: 265, y: 65, w: 180, h: 310, name: "City Buildings" },
+                { x: 220, y: 140, w: 70, h: 80, name: "Small Building" },
+                { x: 400, y: 140, w: 50, h: 90, name: "Diagonal Element" }
+            ];
+            
+            sprites.forEach(sprite => createSprite(ctx, sprite));
+        }
+
+        function extractFloodFill() {
+            const ctx = currentCanvas.getContext('2d', { willReadFrequently: true });
+            const w = currentCanvas.width;
+            const h = currentCanvas.height;
+            const imageData = ctx.getImageData(0, 0, w, h);
+            const visited = new Set();
+            const minPixels = parseInt(minSize.value);
+            
+            let spriteCount = 0;
+            
+            for (let y = 0; y < h; y += 5) {
+                for (let x = 0; x < w; x += 5) {
+                    const idx = (y * w + x) * 4;
+                    const key = `${x},${y}`;
+                    
+                    if (visited.has(key)) continue;
+                    
+                    const r = imageData.data[idx];
+                    const g = imageData.data[idx + 1];
+                    const b = imageData.data[idx + 2];
+                    
+                    if (isBackgroundColor(r, g, b)) continue;
+                    
+                    const region = floodFill(imageData, x, y, visited);
+                    
+                    if (region.pixels.length >= minPixels) {
+                        spriteCount++;
+                        const sprite = {
+                            x: region.minX,
+                            y: region.minY,
+                            w: region.maxX - region.minX + 1,
+                            h: region.maxY - region.minY + 1,
+                            name: `Element ${spriteCount}`
+                        };
+                        createSprite(ctx, sprite);
+                    }
+                }
+            }
+        }
+
+        function floodFill(imageData, startX, startY, visited) {
+            const w = imageData.width;
+            const h = imageData.height;
+            const stack = [{x: startX, y: startY}];
+            const pixels = [];
+            let minX = startX, maxX = startX, minY = startY, maxY = startY;
+            
+            const startIdx = (startY * w + startX) * 4;
+            const targetR = imageData.data[startIdx];
+            const targetG = imageData.data[startIdx + 1];
+            const targetB = imageData.data[startIdx + 2];
+            
+            while (stack.length > 0 && pixels.length < 50000) {
+                const {x, y} = stack.pop();
+                const key = `${x},${y}`;
+                
+                if (x < 0 || x >= w || y < 0 || y >= h || visited.has(key)) continue;
+                
+                const idx = (y * w + x) * 4;
+                const r = imageData.data[idx];
+                const g = imageData.data[idx + 1];
+                const b = imageData.data[idx + 2];
+                
+                if (isBackgroundColor(r, g, b)) continue;
+                
+                const colorDiff = Math.abs(r - targetR) + Math.abs(g - targetG) + Math.abs(b - targetB);
+                if (colorDiff > 100) continue;
+                
+                visited.add(key);
+                pixels.push({x, y});
+                
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                minY = Math.min(minY, y);
+                maxY = Math.max(maxY, y);
+                
+                stack.push({x: x+1, y}, {x: x-1, y}, {x, y: y+1}, {x, y: y-1});
+            }
+            
+            return {pixels, minX, maxX, minY, maxY};
+        }
+
+        function extractGrid() {
+            const ctx = currentCanvas.getContext('2d', { willReadFrequently: true });
+            const cols = parseInt(gridCols.value);
+            const rows = parseInt(gridRows.value);
+            const cellW = Math.floor(currentCanvas.width / cols);
+            const cellH = Math.floor(currentCanvas.height / rows);
+            
+            for (let row = 0; row < rows; row++) {
+                for (let col = 0; col < cols; col++) {
+                    const sprite = {
+                        x: col * cellW,
+                        y: row * cellH,
+                        w: cellW,
+                        h: cellH,
+                        name: `Cell ${row + 1}-${col + 1}`
+                    };
+                    createSprite(ctx, sprite);
+                }
+            }
+        }
+
+        function extractContours() {
+            const ctx = currentCanvas.getContext('2d', { willReadFrequently: true });
+            const imageData = ctx.getImageData(0, 0, currentCanvas.width, currentCanvas.height);
+            const w = imageData.width;
+            const h = imageData.height;
+            const minPixels = parseInt(minSize.value);
+            
+            // Simple blob detection
+            const visited = Array(w * h).fill(false);
+            let spriteCount = 0;
+            
+            for (let y = 0; y < h; y++) {
+                for (let x = 0; x < w; x++) {
+                    const idx = (y * w + x);
+                    if (visited[idx]) continue;
+                    
+                    const pixelIdx = idx * 4;
+                    const r = imageData.data[pixelIdx];
+                    const g = imageData.data[pixelIdx + 1];
+                    const b = imageData.data[pixelIdx + 2];
+                    
+                    if (isBackgroundColor(r, g, b)) continue;
+                    
+                    const blob = findBlob(imageData, x, y, visited);
+                    
+                    if (blob.count >= minPixels) {
+                        spriteCount++;
+                        const sprite = {
+                            x: blob.minX,
+                            y: blob.minY,
+                            w: blob.maxX - blob.minX + 1,
+                            h: blob.maxY - blob.minY + 1,
+                            name: `Object ${spriteCount}`
+                        };
+                        createSprite(ctx, sprite);
+                    }
+                }
+            }
+        }
+
+        function findBlob(imageData, startX, startY, visited) {
+            const w = imageData.width;
+            const h = imageData.height;
+            const queue = [{x: startX, y: startY}];
+            let count = 0;
+            let minX = startX, maxX = startX, minY = startY, maxY = startY;
+            
+            while (queue.length > 0 && count < 10000) {
+                const {x, y} = queue.shift();
+                
+                if (x < 0 || x >= w || y < 0 || y >= h) continue;
+                
+                const idx = y * w + x;
+                if (visited[idx]) continue;
+                
+                const pixelIdx = idx * 4;
+                const r = imageData.data[pixelIdx];
+                const g = imageData.data[pixelIdx + 1];
+                const b = imageData.data[pixelIdx + 2];
+                
+                if (isBackgroundColor(r, g, b)) continue;
+                
+                visited[idx] = true;
+                count++;
+                
+                minX = Math.min(minX, x);
+                maxX = Math.max(maxX, x);
+                minY = Math.min(minY, y);
+                maxY = Math.max(maxY, y);
+                
+                queue.push({x: x+1, y}, {x: x-1, y}, {x, y: y+1}, {x, y: y-1});
+            }
+            
+            return {count, minX, maxX, minY, maxY};
+        }
+
+        function detectBackgroundColor(imageData) {
+            const w = imageData.width;
+            const h = imageData.height;
+            const corners = [
+                imageData.data.slice(0, 4), // top-left
+                imageData.data.slice((w - 1) * 4, (w - 1) * 4 + 4), // top-right
+                imageData.data.slice((h - 1) * w * 4, (h - 1) * w * 4 + 4), // bottom-left
+                imageData.data.slice(((h - 1) * w + w - 1) * 4, ((h - 1) * w + w - 1) * 4 + 4) // bottom-right
+            ];
+            
+            // Average corner colors
+            let r = 0, g = 0, b = 0;
+            corners.forEach(corner => {
+                r += corner[0];
+                g += corner[1];
+                b += corner[2];
+            });
+            r = Math.floor(r / 4);
+            g = Math.floor(g / 4);
+            b = Math.floor(b / 4);
+            
+            return {r, g, b};
+        }
+
+        function isBackgroundColor(r, g, b) {
+            const mode = bgMode.value;
+            const threshold = parseInt(bgThreshold.value);
+            
+            if (mode === 'dark') {
+                // Remove dark colors
+                return r < threshold && g < threshold && b < threshold;
+            } else if (mode === 'light') {
+                // Remove light colors
+                return r > (255 - threshold) && g > (255 - threshold) && b > (255 - threshold);
+            } else if (mode === 'auto' && detectedBgColor) {
+                // Remove colors similar to detected background
+                const dr = Math.abs(r - detectedBgColor.r);
+                const dg = Math.abs(g - detectedBgColor.g);
+                const db = Math.abs(b - detectedBgColor.b);
+                return dr < threshold && dg < threshold && db < threshold;
+            }
+            return false;
+        }
+
+        function createSprite(sourceCtx, sprite) {
+            const imageData = sourceCtx.getImageData(sprite.x, sprite.y, sprite.w, sprite.h);
+            const pixels = imageData.data;
+            
+            // Make background transparent
+            for (let i = 0; i < pixels.length; i += 4) {
+                const r = pixels[i];
+                const g = pixels[i + 1];
+                const b = pixels[i + 2];
+                
+                if (isBackgroundColor(r, g, b)) {
+                    pixels[i + 3] = 0;
+                }
+            }
+            
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = sprite.w;
+            tempCanvas.height = sprite.h;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.putImageData(imageData, 0, 0);
+            
+            const size = parseInt(outputSize.value);
+            const outputCanvas = document.createElement('canvas');
+            outputCanvas.width = size;
+            outputCanvas.height = size;
+            const outputCtx = outputCanvas.getContext('2d');
+            
+            const scale = Math.min(size / sprite.w, size / sprite.h);
+            const scaledW = sprite.w * scale;
+            const scaledH = sprite.h * scale;
+            const offsetX = (size - scaledW) / 2;
+            const offsetY = (size - scaledH) / 2;
+            
+            outputCtx.drawImage(tempCanvas, 0, 0, sprite.w, sprite.h, 
+                              offsetX, offsetY, scaledW, scaledH);
+            
+            // Display
+            const spriteItem = document.createElement('div');
+            spriteItem.className = 'sprite-item';
+            
+            const title = document.createElement('h3');
+            title.textContent = sprite.name;
+            
+            const canvasWrapper = document.createElement('div');
+            canvasWrapper.className = 'canvas-wrapper';
+            
+            const displayCanvas = document.createElement('canvas');
+            displayCanvas.width = size;
+            displayCanvas.height = size;
+            const displayCtx = displayCanvas.getContext('2d');
+            displayCtx.drawImage(outputCanvas, 0, 0);
+            
+            const btn = document.createElement('button');
+            btn.className = 'download-btn';
+            btn.textContent = 'Download PNG';
+            btn.onclick = () => {
+                const link = document.createElement('a');
+                link.download = sprite.name.toLowerCase().replace(/\s+/g, '_') + `_${size}x${size}.png`;
+                link.href = outputCanvas.toDataURL('image/png');
+                link.click();
+            };
+            
+            canvasWrapper.appendChild(displayCanvas);
+            spriteItem.appendChild(title);
+            spriteItem.appendChild(canvasWrapper);
+            spriteItem.appendChild(btn);
+            spriteGrid.appendChild(spriteItem);
+        }
+    </script>
+</body>
+</html>
